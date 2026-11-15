@@ -1,0 +1,8 @@
+flowchart LR
+  O[Human operator<br/>SSO identity] -->|Tailscale client| CP[Tailscale policy and control plane]
+  GL[GitLab protected manual job] -->|masked ephemeral tagged auth key| RUN[Trusted self-managed runner]
+  RUN -->|tag:gitlab-ci<br/>network: TCP 22 only| CP
+  CP -->|WireGuard encrypted path<br/>Tailscale SSH policy| VM[Private Linux host<br/>tag:private-host]
+  VM --> DEP[deploy account<br/>read-only smoke check]
+  CP -->|operator rule: check / re-auth| VM
+  BR[Public bastion] -. removed from access path .-> VM

@@ -1,0 +1,48 @@
+stages:
+  - validate
+  - private-access
+
+workflow:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH'
+
+variables:
+  GIT_DEPTH: "1"
+
+policy_validation:
+  stage: validate
+  image: python:3.12-slim
+  script:
+    - python3 scripts/validate_policy.py
+    - python3 -m unittest discover -s tests -v
+  rules:
+    - when: on_success
+
+private_access_smoke:
+  stage: private-access
+  image: debian:bookworm-slim
+  tags:
+    - tailscale-tun
+  before_script:
+    - apt-get update -qq
+    - DEBIAN_FRONTEND=noninteractive apt-get install -y -qq ca-certificates curl
+    - curl -fsSL https://tailscale.com/install.sh | sh
+    - tailscaled --state=mem: --socket=/var/run/tailscale/tailscaled.sock &
+    - for attempt in $(seq 1 30); do tailscale status >/dev/null 2>&1 && break || sleep 1; done
+    - test -n "$TAILSCALE_AUTHKEY"
+    - test -n "$PRIVATE_TARGET_HOST"
+    - tailscale up --auth-key="$TAILSCALE_AUTHKEY" --hostname="gl-${CI_PROJECT_ID}-${CI_JOB_ID}" --accept-routes
+  script:
+    - chmod +x scripts/private_access_smoke.sh
+    - scripts/private_access_smoke.sh "$PRIVATE_TARGET_HOST" "$PRIVATE_TARGET_USER"
+  after_script:
+    - tailscale logout || true
+  variables:
+    GIT_STRATEGY: fetch
+  rules:
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_COMMIT_REF_PROTECTED == "true"'
+      when: manual
+    - when: never
+  allow_failure: false
+  timeout: 5m

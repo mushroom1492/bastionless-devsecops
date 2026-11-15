@@ -1,0 +1,27 @@
+{
+  // Merge these entries into your existing tailnet policy; do not replace policy blindly.
+  "groups": {
+    "group:platform-ops": ["ops@example.com"],
+  },
+  "tagOwners": {
+    "tag:gitlab-ci": ["autogroup:admin"],
+    "tag:private-host": ["autogroup:admin"],
+  },
+  "acls": [
+    // CI can reach only SSH on tagged private hosts.
+    {"action": "accept", "src": ["tag:gitlab-ci"], "dst": ["tag:private-host:22"]},
+    // Named human operators can reach SSH on private hosts.
+    {"action": "accept", "src": ["group:platform-ops"], "dst": ["tag:private-host:22"]},
+  ],
+  "ssh": [
+    // Human access requires periodic identity re-check. Use a non-root local account.
+    {"action": "check", "src": ["group:platform-ops"], "dst": ["tag:private-host"], "users": ["autogroup:nonroot"], "checkPeriod": "1h"},
+    // CI receives the dedicated deploy account only, not interactive admin access.
+    {"action": "accept", "src": ["tag:gitlab-ci"], "dst": ["tag:private-host"], "users": ["deploy"]},
+  ],
+  "tests": [
+    {"src": "tag:gitlab-ci", "accept": ["tag:private-host:22"]},
+    {"src": "tag:gitlab-ci", "deny": ["tag:private-host:443"]},
+    {"src": "group:platform-ops", "accept": ["tag:private-host:22"]},
+  ],
+}
